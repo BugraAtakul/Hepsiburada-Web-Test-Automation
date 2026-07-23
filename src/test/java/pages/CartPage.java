@@ -14,14 +14,13 @@ import java.util.Optional;
 public class CartPage extends BasePage {
 
     private static final int CART_CONTENT_TIMEOUT_SECONDS = 20;
-    private static final int OPTIONAL_CONFIRM_TIMEOUT_SECONDS = 2;
+    private static final int OPTIONAL_CONFIRM_TIMEOUT_SECONDS = 5;
 
     // Sepet ürün adı, kaldırma bağlantısı ve opsiyonel onay butonu locator'larıdır.
     private static final By PRODUCT_LINK = By.cssSelector("[class*='product_name_'] a");
     private static final By REMOVE_BUTTON = By.cssSelector("a[aria-label='Sepetten Çıkar']");
-    private static final By CONFIRM_REMOVE_BUTTON = By.cssSelector(
-            "[role='dialog'] button[kind='secondary'], " +
-                    "[aria-modal='true'] button[kind='secondary']");
+    private static final By CONFIRM_REMOVE_BUTTON = By.xpath(
+            "//*[self::button or @role='button'][normalize-space(.)='Sil']");
 
     /** Aktif tarayıcıyı ortak BasePage işlemlerine iletir. */
     public CartPage(WebDriver driver) {
@@ -46,11 +45,17 @@ public class CartPage extends BasePage {
         WebElement removeButton = productContainer.findElement(REMOVE_BUTTON);
         javascriptClick(removeButton);
 
-        clickOptionalRemoveConfirmation();
+        clickOptionalRemoveConfirmation(expectedProduct);
 
         // Asenkron silme tamamlanıp ürün DOM'dan kalkana kadar beklenir.
-        until(DEFAULT_TIMEOUT_SECONDS,
-                ignored -> findMatchingVisibleProduct(expectedProduct).isEmpty());
+        try {
+            until(DEFAULT_TIMEOUT_SECONDS,
+                    ignored -> findMatchingVisibleProduct(expectedProduct).isEmpty());
+        } catch (TimeoutException exception) {
+            throw new IllegalStateException(
+                    "Silme onayından sonra ürün sepetten kaldırılamadı: " + expectedProduct.name(),
+                    exception);
+        }
     }
 
     /** Sepet yüklenip beklenen URL/koda eşleşen ürün görünene kadar bekler. */
@@ -88,7 +93,7 @@ public class CartPage extends BasePage {
     }
 
     /** Bazı tasarımlarda açılan silme modalını kısa süre bekler; modal yoksa akışı geciktirmez. */
-    private void clickOptionalRemoveConfirmation() {
+    private void clickOptionalRemoveConfirmation(ProductIdentity expectedProduct) {
         try {
             WebElement confirmRemoveButton = until(OPTIONAL_CONFIRM_TIMEOUT_SECONDS, ignored -> {
                 for (WebElement button : driver.findElements(CONFIRM_REMOVE_BUTTON)) {
@@ -108,8 +113,14 @@ public class CartPage extends BasePage {
             } catch (ElementClickInterceptedException exception) {
                 javascriptClick(confirmRemoveButton);
             }
-        } catch (TimeoutException ignored) {
-            // Güncel tasarımda onay modalı gösterilmiyorsa silme işlemi doğrudan devam eder.
+        } catch (TimeoutException exception) {
+            // Bazı tasarımlar ürünü doğrudan silebilir. Ürün hâlâ görünüyorsa onay
+            // butonu bulunamamış demektir ve akış sessizce devam etmemelidir.
+            if (findMatchingVisibleProduct(expectedProduct).isPresent()) {
+                throw new IllegalStateException(
+                        "Sepetten silme onayındaki 'Sil' butonu bulunamadı.",
+                        exception);
+            }
         }
     }
 
