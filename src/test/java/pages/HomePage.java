@@ -8,6 +8,7 @@ import org.openqa.selenium.SearchContext;
 import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.TimeoutException;
 import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.WebDriverException;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.interactions.Actions;
 
@@ -76,29 +77,23 @@ public class HomePage extends BasePage {
         ((JavascriptExecutor) driver)
                 .executeScript("arguments[0].focus(); arguments[0].click();", collapsedSearchBox);
 
-        try {
-            // React eski input'u yenisiyle değiştirirse eski WebElement stale olur.
-            until(SHORT_TIMEOUT_SECONDS, ignored -> {
-                try {
-                    collapsedSearchBox.isDisplayed();
+        // React eski input'u yenisiyle değiştirebilir. Sabit süre beklemek yerine
+        // her kontrolde güncel input yeniden bulunup odaklanır; hazır olur olmaz devam edilir.
+        until(DEFAULT_TIMEOUT_SECONDS, currentDriver -> {
+            try {
+                WebElement currentSearchBox = currentDriver.findElement(SEARCH_BOX);
+                if (!currentSearchBox.isDisplayed()) {
                     return false;
-                } catch (StaleElementReferenceException e) {
-                    return true;
                 }
-            });
-        } catch (TimeoutException ignored) {
-            // Bileşen input'u değiştirmediyse mevcut locator ile devam edilir.
-        }
 
-        // React bileşeni yazma başlarken input'u tekrar oluşturabildiği için
-        // WebElement referansına sendKeys göndermek yeniden stale hatası üretir.
-        // Klavye olaylarını o anda odakta olan input'a göndererek DOM yenilemesinden
-        // bağımsız ilerliyoruz.
-        // JavaScript ile odaktaki elementin doğru arama input'u olduğu doğrulanır.
-        until(DEFAULT_TIMEOUT_SECONDS, ignored ->
-                (Boolean) ((JavascriptExecutor) driver).executeScript(
-                        "return document.activeElement != null && " +
-                                "document.activeElement.matches(\"input[data-test-id='search-bar-input']\");"));
+                ((JavascriptExecutor) currentDriver)
+                        .executeScript("arguments[0].focus();", currentSearchBox);
+                return (Boolean) ((JavascriptExecutor) currentDriver)
+                        .executeScript("return document.activeElement === arguments[0];", currentSearchBox);
+            } catch (StaleElementReferenceException exception) {
+                return false;
+            }
+        });
 
         pauseBetweenActions();
         // Arama alanında eski değer varsa Ctrl+A ile tamamı seçilir.
@@ -116,8 +111,25 @@ public class HomePage extends BasePage {
     /** Girişten sonra hesap alanı görünüyorsa true, zaman aşımı olursa false döndürür. */
     public boolean loginCompleted() {
         try {
-            return visible(LOGGED_IN_ACCOUNT, LONG_TIMEOUT_SECONDS).isDisplayed();
-        } catch (Exception e) {
+            // Header, giriş yönlendirmesinden sonra React tarafından yenilenebilir.
+            // Her kontrolde elementi yeniden bularak geçici stale durumunda beklemeye devam eder.
+            return until(LONG_TIMEOUT_SECONDS, currentDriver -> {
+                try {
+                    return currentDriver.findElements(LOGGED_IN_ACCOUNT).stream()
+                            .anyMatch(WebElement::isDisplayed);
+                } catch (StaleElementReferenceException exception) {
+                    return false;
+                } catch (WebDriverException exception) {
+                    // Kimlik doğrulama yönlendirmesi sırasında Chrome eski frame'i kısa
+                    // süreliğine ayırabilir. Yeni sayfa hazır olana kadar tekrar denenir.
+                    if (exception.getMessage() != null
+                            && exception.getMessage().contains("target frame detached")) {
+                        return false;
+                    }
+                    throw exception;
+                }
+            });
+        } catch (TimeoutException exception) {
             return false;
         }
     }

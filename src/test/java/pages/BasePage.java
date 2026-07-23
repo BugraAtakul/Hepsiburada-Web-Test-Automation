@@ -27,10 +27,10 @@ public abstract class BasePage {
     protected static final int DEFAULT_TIMEOUT_SECONDS = 10;
 
     // Yazma ve adım gecikmeleri, etkileşimlerin insan hızına yakın ilerlemesini sağlar.
-    private static final int MIN_TYPING_DELAY_MS = 70;
-    private static final int MAX_TYPING_DELAY_MS = 130;
-    private static final int MIN_ACTION_DELAY_MS = 250;
-    private static final int MAX_ACTION_DELAY_MS = 450;
+    private static final int MIN_TYPING_DELAY_MS = 40;
+    private static final int MAX_TYPING_DELAY_MS = 70;
+    private static final int MIN_ACTION_DELAY_MS = 150;
+    private static final int MAX_ACTION_DELAY_MS = 250;
 
     // protected: alt Page Object sınıfları driver'a erişebilir.
     protected final WebDriver driver;
