@@ -1,0 +1,27 @@
+# Kullanıcı Hepsiburada hesabına giriş yapar
+
+* Hepsiburada ana sayfasını aç
+* Varsa çerez bildirimini kapat
+* Giriş ekranını aç
+* Kayıtlı kullanıcı bilgileriyle giriş yap
+* Kullanıcının giriş yaptığını doğrula
+
+# <keyword> kelimesiyle ürün arar ve sonuçları doğrular
+
+* Arama alanında <keyword> kelimesini ara
+* Arama sonucunun <keyword> ile ilgili olduğunu doğrula
+
+# İkinci satırdaki ilk ürünü detay sayfasından sepete ekler
+
+* Sonuçların ikinci satırındaki ilk ürünün sayfasını aç
+* Seçilen ürünün detay sayfasının açıldığını doğrula
+* Ürünü detay sayfasından sepete ekle
+* Ürünün sepete eklendiğine dair onay mesajını doğrula
+* Sepet sayacının arttığını doğrula
+
+# Eklenen ürünü sepette doğrular ve sepetten kaldırır
+
+* Sepet sayfasını aç
+* Eklenen ürünün adı ve temel detaylarının sepette eşleştiğini doğrula
+* Sepetteki ürünü kaldır
+* Eklenen ürünün sepetten kaldırıldığını doğrula

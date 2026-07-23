@@ -1,0 +1,21 @@
+# Gerçek kullanıcı bilgileri içerebilecek yerel dosya
+src/test/resources/config.properties
+.env
+.env.*
+!.env.example
+
+# Derleme ve test çıktıları
+target/
+out/
+reports/
+logs/
+.gauge/
+*.log
+
+# IntelliJ IDEA kullanıcı ve çalışma alanı ayarları
+.idea/
+*.iml
+
+# Yerel yardımcı klasörler
+.agents/
+gauge_bin/
