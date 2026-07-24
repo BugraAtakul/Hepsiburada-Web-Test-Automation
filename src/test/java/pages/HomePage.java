@@ -2,6 +2,7 @@ package pages;
 
 import org.openqa.selenium.By;
 import org.openqa.selenium.ElementClickInterceptedException;
+import org.openqa.selenium.ElementNotInteractableException;
 import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.Keys;
 import org.openqa.selenium.SearchContext;
@@ -23,6 +24,7 @@ public class HomePage extends BasePage {
     // Kısa süre opsiyonel alanlarda, uzun süre giriş gibi yavaş işlemlerde kullanılır.
     private static final int SHORT_TIMEOUT_SECONDS = 5;
     private static final int LONG_TIMEOUT_SECONDS = 20;
+    private static final int SEARCH_TEXT_ATTEMPTS = 3;
 
     // By nesneleri, sayfadaki elementlerin id/CSS özellikleriyle adresleridir.
     private static final By COOKIE_HOST = By.cssSelector("efilli-layout-dynamic");
@@ -68,6 +70,10 @@ public class HomePage extends BasePage {
 
     /** Arama kutusunu etkinleştirir, aranan metni yazar ve Enter'a basar. */
     public void searchFor(String text) {
+        if (text == null || text.isBlank()) {
+            throw new IllegalArgumentException("Arama metni boş olamaz.");
+        }
+
         WebElement collapsedSearchBox = visible(SEARCH_BOX);
 
         // Hepsiburada'nın arama bileşeninde input'un üstünde tıklamayı yakalayan
@@ -77,35 +83,178 @@ public class HomePage extends BasePage {
         ((JavascriptExecutor) driver)
                 .executeScript("arguments[0].focus(); arguments[0].click();", collapsedSearchBox);
 
-        // React eski input'u yenisiyle değiştirebilir. Sabit süre beklemek yerine
-        // her kontrolde güncel input yeniden bulunup odaklanır; hazır olur olmaz devam edilir.
-        until(DEFAULT_TIMEOUT_SECONDS, currentDriver -> {
+        // Genişleyen React input'u sabitlendikten sonra metni o elementin kendisine yazar.
+        // Son değer tam eşleşmezse Enter'a basmadan güncel input ile yeniden dener.
+        WebElement verifiedSearchBox = enterVerifiedSearchText(text);
+        pauseBetweenActions();
+        verifiedSearchBox.sendKeys(Keys.ENTER);
+    }
+
+    /**
+     * Arama metnini güncel input'a yazar ve değer kısa süre kararlı biçimde tam
+     * eşleşene kadar doğrular. React elementi yenilerse işlem baştan denenir.
+     */
+    private WebElement enterVerifiedSearchText(String text) {
+        RuntimeException lastFailure = null;
+
+        for (int attempt = 1; attempt <= SEARCH_TEXT_ATTEMPTS; attempt++) {
             try {
-                WebElement currentSearchBox = currentDriver.findElement(SEARCH_BOX);
-                if (!currentSearchBox.isDisplayed()) {
-                    return false;
+                WebElement searchBox = waitForStableSearchBox();
+                searchBox.sendKeys(Keys.chord(Keys.CONTROL, "a"), Keys.BACK_SPACE);
+
+                // Temizleme işlemi de input'u yeniden oluşturabileceği için boş değeri
+                // doğrulayıp elementi tekrar locator üzerinden alır.
+                waitForStableSearchValue("");
+                searchBox = waitForStableSearchBox();
+                searchBox.sendKeys(text);
+
+                return waitForStableSearchValue(text);
+            } catch (StaleElementReferenceException
+                     | ElementNotInteractableException
+                     | TimeoutException exception) {
+                lastFailure = exception;
+            }
+        }
+
+        // Native tuş olayları üç kez de React yeniden çizimine denk gelirse son
+        // çare olarak native input setter ve gerçek input/change olayları kullanılır.
+        return setSearchValueWithJavaScript(text, lastFailure);
+    }
+
+    /** Görünür arama input'u iki ardışık kontrolde aynı kalana kadar bekler. */
+    private WebElement waitForStableSearchBox() {
+        WebElement[] previousSearchBox = new WebElement[1];
+        int[] consecutiveMatches = {0};
+
+        return until(DEFAULT_TIMEOUT_SECONDS, currentDriver -> {
+            try {
+                WebElement currentSearchBox = findUsableSearchBox(currentDriver);
+                if (currentSearchBox == null) {
+                    previousSearchBox[0] = null;
+                    consecutiveMatches[0] = 0;
+                    return null;
                 }
 
                 ((JavascriptExecutor) currentDriver)
                         .executeScript("arguments[0].focus();", currentSearchBox);
-                return (Boolean) ((JavascriptExecutor) currentDriver)
-                        .executeScript("return document.activeElement === arguments[0];", currentSearchBox);
+
+                if (currentSearchBox.equals(previousSearchBox[0])) {
+                    consecutiveMatches[0]++;
+                } else {
+                    previousSearchBox[0] = currentSearchBox;
+                    consecutiveMatches[0] = 1;
+                }
+
+                return consecutiveMatches[0] >= 2 ? currentSearchBox : null;
             } catch (StaleElementReferenceException exception) {
-                return false;
+                previousSearchBox[0] = null;
+                consecutiveMatches[0] = 0;
+                return null;
             }
         });
+    }
 
-        pauseBetweenActions();
-        // Arama alanında eski değer varsa Ctrl+A ile tamamı seçilir.
-        new Actions(driver)
-                .keyDown(Keys.CONTROL)
-                .sendKeys("a")
-                .keyUp(Keys.CONTROL)
-                .perform();
-        typeIntoActiveElementLikeUser(text);
-        pauseBetweenActions();
-        // Enter tuşu arama formunu gönderir.
-        new Actions(driver).sendKeys(Keys.ENTER).perform();
+    /** Input değerinin iki ardışık kontrolde beklenen metne tam eşit olduğunu doğrular. */
+    private WebElement waitForStableSearchValue(String expectedValue) {
+        WebElement[] previousSearchBox = new WebElement[1];
+        int[] consecutiveMatches = {0};
+
+        return until(SHORT_TIMEOUT_SECONDS, currentDriver -> {
+            try {
+                WebElement currentSearchBox = findUsableSearchBox(currentDriver);
+                String currentValue = currentSearchBox == null
+                        ? null
+                        : currentSearchBox.getDomProperty("value");
+
+                if (!expectedValue.equals(currentValue)) {
+                    previousSearchBox[0] = null;
+                    consecutiveMatches[0] = 0;
+                    return null;
+                }
+
+                if (currentSearchBox.equals(previousSearchBox[0])) {
+                    consecutiveMatches[0]++;
+                } else {
+                    previousSearchBox[0] = currentSearchBox;
+                    consecutiveMatches[0] = 1;
+                }
+
+                return consecutiveMatches[0] >= 2 ? currentSearchBox : null;
+            } catch (StaleElementReferenceException exception) {
+                previousSearchBox[0] = null;
+                consecutiveMatches[0] = 0;
+                return null;
+            }
+        });
+    }
+
+    /**
+     * Aynı locator'a uyan birden fazla input varsa odakta olanı; yoksa görünür
+     * ve etkin adayların sonuncusunu seçer. Genişletilmiş input DOM'a sonradan eklenir.
+     */
+    private WebElement findUsableSearchBox(WebDriver currentDriver) {
+        WebElement fallback = null;
+
+        for (WebElement candidate : currentDriver.findElements(SEARCH_BOX)) {
+            try {
+                if (!candidate.isDisplayed() || !candidate.isEnabled()) {
+                    continue;
+                }
+
+                fallback = candidate;
+                boolean isActive = (Boolean) ((JavascriptExecutor) currentDriver)
+                        .executeScript(
+                                "return document.activeElement === arguments[0];", candidate);
+                if (isActive) {
+                    return candidate;
+                }
+            } catch (StaleElementReferenceException ignored) {
+                // Adaylar taranırken değişen input atlanır; sonraki poll güncel DOM'u okur.
+            }
+        }
+
+        return fallback;
+    }
+
+    /** React kontrollü input'un değerini native setter ile güncelleyip olayları yayınlar. */
+    private WebElement setSearchValueWithJavaScript(
+            String text, RuntimeException previousFailure) {
+        try {
+            WebElement searchBox = waitForStableSearchBox();
+            ((JavascriptExecutor) driver).executeScript(
+                    "const input = arguments[0];"
+                            + "const value = arguments[1];"
+                            + "const setter = Object.getOwnPropertyDescriptor("
+                            + "window.HTMLInputElement.prototype, 'value').set;"
+                            + "setter.call(input, value);"
+                            + "input.dispatchEvent(new Event('input', {bubbles: true}));"
+                            + "input.dispatchEvent(new Event('change', {bubbles: true}));"
+                            + "input.focus();",
+                    searchBox, text);
+
+            return waitForStableSearchValue(text);
+        } catch (RuntimeException fallbackFailure) {
+            String actualValue = currentSearchValue();
+            IllegalStateException failure = new IllegalStateException(
+                    "Arama alanına beklenen metin yazılamadı. Beklenen: '"
+                            + text + "', görünen: '" + actualValue + "'",
+                    fallbackFailure);
+            if (previousFailure != null) {
+                failure.addSuppressed(previousFailure);
+            }
+            throw failure;
+        }
+    }
+
+    /** Hata mesajı için görünür arama input'undaki son değeri güvenle okur. */
+    private String currentSearchValue() {
+        try {
+            WebElement searchBox = findUsableSearchBox(driver);
+            String value = searchBox == null ? null : searchBox.getDomProperty("value");
+            return value == null ? "" : value;
+        } catch (RuntimeException ignored) {
+            return "";
+        }
     }
 
     /** Girişten sonra hesap alanı görünüyorsa true, zaman aşımı olursa false döndürür. */
