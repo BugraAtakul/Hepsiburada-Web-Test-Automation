@@ -1,35 +1,27 @@
 package pages;
 
 import model.ProductIdentity;
-import org.openqa.selenium.By;
-import org.openqa.selenium.ElementClickInterceptedException;
 import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.TimeoutException;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
+import utils.ElementHelper;
 
 import java.util.Optional;
 
 /** Sepet sayfasındaki ürün okuma, bulma ve silme davranışlarını temsil eder. */
-public class CartPage extends BasePage {
+public class CartPage extends ElementHelper {
 
     private static final int CART_CONTENT_TIMEOUT_SECONDS = 20;
     private static final int OPTIONAL_CONFIRM_TIMEOUT_SECONDS = 5;
 
-    // Sepet ürün adı, kaldırma bağlantısı ve opsiyonel onay butonu locator'larıdır.
-    private static final By PRODUCT_LINK = By.cssSelector("[class*='product_name_'] a");
-    private static final By REMOVE_BUTTON = By.cssSelector("a[aria-label='Sepetten Çıkar']");
-    private static final By CONFIRM_REMOVE_BUTTON = By.xpath(
-            "//*[self::button or @role='button'][normalize-space(.)='Sil']");
-
-    /** Aktif tarayıcıyı ortak BasePage işlemlerine iletir. */
+    /** Aktif tarayıcıyı ortak ElementHelper işlemlerine iletir. */
     public CartPage(WebDriver driver) {
-        super(driver);
+        super(driver, "cartPage");
     }
 
     /** Kimliği verilen ürünü sepette bulur, kaldırır ve artık görünmediğini bekler. */
     public void deleteProduct(ProductIdentity expectedProduct) {
-        // Sepet React tarafından asenkron yüklendiği için hedef ürün bağlantısı oluşana kadar beklenir.
         WebElement productLink;
         try {
             productLink = until(CART_CONTENT_TIMEOUT_SECONDS,
@@ -39,15 +31,12 @@ public class CartPage extends BasePage {
                     "Sepetten kaldırılacak ürün bulunamadı: " + expectedProduct.name(), exception);
         }
 
-        // XPath ile ürün adından yukarı çıkıp kaldırma butonunu içeren ürün kabı bulunur.
-        WebElement productContainer = productLink.findElement(By.xpath(
-                "./ancestor::*[.//a[@aria-label='Sepetten Çıkar']][1]"));
-        WebElement removeButton = productContainer.findElement(REMOVE_BUTTON);
+        WebElement productContainer = findElement(productLink, "productContainer");
+        WebElement removeButton = findElement(productContainer, "removeButton");
         javascriptClick(removeButton);
 
         clickOptionalRemoveConfirmation(expectedProduct);
 
-        // Asenkron silme tamamlanıp ürün DOM'dan kalkana kadar beklenir.
         try {
             until(DEFAULT_TIMEOUT_SECONDS,
                     ignored -> findMatchingVisibleProduct(expectedProduct).isEmpty());
@@ -60,13 +49,8 @@ public class CartPage extends BasePage {
 
     /** Sepet yüklenip beklenen URL/koda eşleşen ürün görünene kadar bekler. */
     public boolean waitUntilProductIsVisible(ProductIdentity expectedProduct) {
-        try {
-            until(CART_CONTENT_TIMEOUT_SECONDS,
-                    ignored -> findMatchingVisibleProduct(expectedProduct).isPresent());
-            return true;
-        } catch (TimeoutException exception) {
-            return false;
-        }
+        return waitUntilTrue(CART_CONTENT_TIMEOUT_SECONDS,
+                ignored -> findMatchingVisibleProduct(expectedProduct).isPresent());
     }
 
     /** Aynı ürünün sepette görünen ve boş olmayan adını okuyana kadar bekler. */
@@ -83,39 +67,27 @@ public class CartPage extends BasePage {
 
     /** Silme işleminden sonra hedef ürün bağlantısı kaybolana kadar bekler. */
     public boolean waitUntilProductIsRemoved(ProductIdentity expectedProduct) {
-        try {
-            until(DEFAULT_TIMEOUT_SECONDS,
-                    ignored -> findMatchingVisibleProduct(expectedProduct).isEmpty());
-            return true;
-        } catch (TimeoutException exception) {
-            return false;
-        }
+        return waitUntilTrue(DEFAULT_TIMEOUT_SECONDS,
+                ignored -> findMatchingVisibleProduct(expectedProduct).isEmpty());
     }
 
     /** Bazı tasarımlarda açılan silme modalını kısa süre bekler; modal yoksa akışı geciktirmez. */
     private void clickOptionalRemoveConfirmation(ProductIdentity expectedProduct) {
         try {
             WebElement confirmRemoveButton = until(OPTIONAL_CONFIRM_TIMEOUT_SECONDS, ignored -> {
-                for (WebElement button : driver.findElements(CONFIRM_REMOVE_BUTTON)) {
+                for (WebElement button : findElements("confirmRemoveButton")) {
                     try {
                         if (button.isDisplayed() && button.isEnabled()) {
                             return button;
                         }
-                    } catch (StaleElementReferenceException staleElement) {
-                        // Modal yeniden oluşturulursa kısa beklemenin sonraki turunda tekrar aranır.
+                    } catch (StaleElementReferenceException ignoredStaleElement) {
                     }
                 }
                 return null;
             });
 
-            try {
-                confirmRemoveButton.click();
-            } catch (ElementClickInterceptedException exception) {
-                javascriptClick(confirmRemoveButton);
-            }
+            click(confirmRemoveButton);
         } catch (TimeoutException exception) {
-            // Bazı tasarımlar ürünü doğrudan silebilir. Ürün hâlâ görünüyorsa onay
-            // butonu bulunamamış demektir ve akış sessizce devam etmemelidir.
             if (findMatchingVisibleProduct(expectedProduct).isPresent()) {
                 throw new IllegalStateException(
                         "Sepetten silme onayındaki 'Sil' butonu bulunamadı.",
@@ -126,14 +98,13 @@ public class CartPage extends BasePage {
 
     /** Güncellenen DOM içinde hedef ürünün görünür bağlantısını ürün kodu/URL ile arar. */
     private Optional<WebElement> findMatchingVisibleProduct(ProductIdentity expectedProduct) {
-        for (WebElement productLink : driver.findElements(PRODUCT_LINK)) {
+        for (WebElement productLink : findElements("productLink")) {
             try {
                 if (productLink.isDisplayed()
                         && expectedProduct.matchesUrl(productLink.getAttribute("href"))) {
                     return Optional.of(productLink);
                 }
             } catch (StaleElementReferenceException ignored) {
-                // Sepet yüklenirken satır yeniden oluşturulursa sonraki bekleme turunda tekrar aranır.
             }
         }
         return Optional.empty();
@@ -145,7 +116,6 @@ public class CartPage extends BasePage {
             String productName = productLink.getText().trim();
             return productName.isBlank() ? null : productName;
         } catch (StaleElementReferenceException ignored) {
-            // Ürün satırı yenilenirse beklemenin sonraki turunda yeni bağlantı okunur.
             return null;
         }
     }

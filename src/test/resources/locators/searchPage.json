@@ -1,0 +1,12 @@
+[
+  {
+    "key": "productCards",
+    "type": "css",
+    "value": "div[class*='productCard-module_productCardRoot']"
+  },
+  {
+    "key": "productLink",
+    "type": "css",
+    "value": "a[class*='titleText']"
+  }
+]

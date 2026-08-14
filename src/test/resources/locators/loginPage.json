@@ -1,0 +1,17 @@
+[
+  {
+    "key": "emailInput",
+    "type": "id",
+    "value": "txtUserName"
+  },
+  {
+    "key": "passwordInput",
+    "type": "id",
+    "value": "txtPassword"
+  },
+  {
+    "key": "loginButton",
+    "type": "id",
+    "value": "btnLogin"
+  }
+]

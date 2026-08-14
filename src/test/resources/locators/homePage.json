@@ -1,0 +1,47 @@
+[
+  {
+    "key": "cookieHost",
+    "type": "css",
+    "value": "efilli-layout-dynamic"
+  },
+  {
+    "key": "cookieElements",
+    "type": "css",
+    "value": "button, div"
+  },
+  {
+    "key": "accountArea",
+    "type": "css",
+    "value": "a[title='Hesabım'], span[title='Giriş Yap']"
+  },
+  {
+    "key": "loginLink",
+    "type": "id",
+    "value": "login"
+  },
+  {
+    "key": "searchBox",
+    "type": "css",
+    "value": "input[data-test-id='search-bar-input']"
+  },
+  {
+    "key": "resultHeading",
+    "type": "css",
+    "value": "h1[data-test-id='header-h1']"
+  },
+  {
+    "key": "loggedInAccount",
+    "type": "css",
+    "value": "a[title='Hesabım']"
+  },
+  {
+    "key": "cartLink",
+    "type": "css",
+    "value": "a[href*='checkout.hepsiburada.com/sepetim']"
+  },
+  {
+    "key": "cartCount",
+    "type": "id",
+    "value": "cartItemCount"
+  }
+]

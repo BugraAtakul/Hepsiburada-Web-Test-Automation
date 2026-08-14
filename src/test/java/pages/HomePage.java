@@ -1,7 +1,5 @@
 package pages;
 
-import org.openqa.selenium.By;
-import org.openqa.selenium.ElementClickInterceptedException;
 import org.openqa.selenium.ElementNotInteractableException;
 import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.Keys;
@@ -12,44 +10,29 @@ import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebDriverException;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.interactions.Actions;
+import utils.ElementHelper;
 
 import java.util.List;
+import java.util.function.Predicate;
 
-/**
- * Hepsiburada ana sayfası ve üst menüsündeki kullanıcı işlemlerini temsil eder.
- * Page Object Model sayesinde locator'lar ve sayfa davranışları test adımlarından ayrılır.
- */
-public class HomePage extends BasePage {
+/** Hepsiburada ana sayfası ve üst menü işlemleri. */
+public class HomePage extends ElementHelper {
 
-    // Kısa süre opsiyonel alanlarda, uzun süre giriş gibi yavaş işlemlerde kullanılır.
     private static final int SHORT_TIMEOUT_SECONDS = 5;
     private static final int LONG_TIMEOUT_SECONDS = 20;
     private static final int SEARCH_TEXT_ATTEMPTS = 3;
 
-    // By nesneleri, sayfadaki elementlerin id/CSS özellikleriyle adresleridir.
-    private static final By COOKIE_HOST = By.cssSelector("efilli-layout-dynamic");
-    private static final By ACCOUNT_AREA = By.cssSelector("a[title='Hesabım'], span[title='Giriş Yap']");
-    private static final By LOGIN_LINK = By.id("login");
-    private static final By SEARCH_BOX = By.cssSelector("input[data-test-id='search-bar-input']");
-    private static final By RESULT_HEADING = By.cssSelector("h1[data-test-id='header-h1']");
-    private static final By LOGGED_IN_ACCOUNT = By.cssSelector("a[title='Hesabım']");
-    private static final By CART_LINK = By.cssSelector("a[href*='checkout.hepsiburada.com/sepetim']");
-    private static final By CART_COUNT = By.id("cartItemCount");
-
-    /** Aktif tarayıcıyı ortak BasePage işlemlerine iletir. */
     public HomePage(WebDriver driver) {
-        super(driver);
+        super(driver, "homePage");
     }
 
     /** Varsa Shadow DOM içinde açılan çerez bildirimini kabul edip kapatır. */
     public void closeCookieBanner() {
         try {
-            // Shadow DOM, ana HTML ağacından ayrı kapsüllenmiş bir element ağacıdır.
-            WebElement host = present(COOKIE_HOST, SHORT_TIMEOUT_SECONDS);
+            WebElement host = present("cookieHost", SHORT_TIMEOUT_SECONDS);
             SearchContext shadowRoot = host.getShadowRoot();
 
-            // Shadow root içindeki olası buton/div elementleri yazılarına göre taranır.
-            for (WebElement element : shadowRoot.findElements(By.cssSelector("button, div"))) {
+            for (WebElement element : findElements(shadowRoot, "cookieElements")) {
                 if ("Kabul Et".equalsIgnoreCase(element.getText().trim())) {
                     javascriptClick(element);
                     break;
@@ -62,10 +45,9 @@ public class HomePage extends BasePage {
 
     /** Hesap alanının üstüne gelir ve menüde oluşan giriş bağlantısına tıklar. */
     public void openLoginPage() {
-        // Actions.moveToElement gerçek kullanıcının fareyle hover yapmasını taklit eder.
-        new Actions(driver).moveToElement(visible(ACCOUNT_AREA)).perform();
+        new Actions(driver).moveToElement(visible("accountArea")).perform();
         pauseBetweenActions();
-        click(LOGIN_LINK);
+        click("loginLink");
     }
 
     /** Arama kutusunu etkinleştirir, aranan metni yazar ve Enter'a basar. */
@@ -74,26 +56,17 @@ public class HomePage extends BasePage {
             throw new IllegalArgumentException("Arama metni boş olamaz.");
         }
 
-        WebElement collapsedSearchBox = visible(SEARCH_BOX);
+        WebElement collapsedSearchBox = visible("searchBox");
 
-        // Hepsiburada'nın arama bileşeninde input'un üstünde tıklamayı yakalayan
-        // bir katman bulunabiliyor. Tıklama sonrasında site eski input'u DOM'dan
-        // kaldırıp genişletilmiş yeni bir input oluşturuyor.
         scrollTo(collapsedSearchBox);
         ((JavascriptExecutor) driver)
                 .executeScript("arguments[0].focus(); arguments[0].click();", collapsedSearchBox);
 
-        // Genişleyen React input'u sabitlendikten sonra metni o elementin kendisine yazar.
-        // Son değer tam eşleşmezse Enter'a basmadan güncel input ile yeniden dener.
         WebElement verifiedSearchBox = enterVerifiedSearchText(text);
         pauseBetweenActions();
         verifiedSearchBox.sendKeys(Keys.ENTER);
     }
 
-    /**
-     * Arama metnini güncel input'a yazar ve değer kısa süre kararlı biçimde tam
-     * eşleşene kadar doğrular. React elementi yenilerse işlem baştan denenir.
-     */
     private WebElement enterVerifiedSearchText(String text) {
         RuntimeException lastFailure = null;
 
@@ -102,8 +75,6 @@ public class HomePage extends BasePage {
                 WebElement searchBox = waitForStableSearchBox();
                 searchBox.sendKeys(Keys.chord(Keys.CONTROL, "a"), Keys.BACK_SPACE);
 
-                // Temizleme işlemi de input'u yeniden oluşturabileceği için boş değeri
-                // doğrulayıp elementi tekrar locator üzerinden alır.
                 waitForStableSearchValue("");
                 searchBox = waitForStableSearchBox();
                 searchBox.sendKeys(text);
@@ -116,57 +87,31 @@ public class HomePage extends BasePage {
             }
         }
 
-        // Native tuş olayları üç kez de React yeniden çizimine denk gelirse son
-        // çare olarak native input setter ve gerçek input/change olayları kullanılır.
         return setSearchValueWithJavaScript(text, lastFailure);
     }
 
-    /** Görünür arama input'u iki ardışık kontrolde aynı kalana kadar bekler. */
     private WebElement waitForStableSearchBox() {
-        WebElement[] previousSearchBox = new WebElement[1];
-        int[] consecutiveMatches = {0};
-
-        return until(DEFAULT_TIMEOUT_SECONDS, currentDriver -> {
-            try {
-                WebElement currentSearchBox = findUsableSearchBox(currentDriver);
-                if (currentSearchBox == null) {
-                    previousSearchBox[0] = null;
-                    consecutiveMatches[0] = 0;
-                    return null;
-                }
-
-                ((JavascriptExecutor) currentDriver)
-                        .executeScript("arguments[0].focus();", currentSearchBox);
-
-                if (currentSearchBox.equals(previousSearchBox[0])) {
-                    consecutiveMatches[0]++;
-                } else {
-                    previousSearchBox[0] = currentSearchBox;
-                    consecutiveMatches[0] = 1;
-                }
-
-                return consecutiveMatches[0] >= 2 ? currentSearchBox : null;
-            } catch (StaleElementReferenceException exception) {
-                previousSearchBox[0] = null;
-                consecutiveMatches[0] = 0;
-                return null;
-            }
+        return waitForStableSearchBox(DEFAULT_TIMEOUT_SECONDS, searchBox -> {
+            ((JavascriptExecutor) driver)
+                    .executeScript("arguments[0].focus();", searchBox);
+            return true;
         });
     }
 
-    /** Input değerinin iki ardışık kontrolde beklenen metne tam eşit olduğunu doğrular. */
     private WebElement waitForStableSearchValue(String expectedValue) {
+        return waitForStableSearchBox(SHORT_TIMEOUT_SECONDS,
+                searchBox -> expectedValue.equals(searchBox.getDomProperty("value")));
+    }
+
+    private WebElement waitForStableSearchBox(
+            int seconds, Predicate<WebElement> acceptableSearchBox) {
         WebElement[] previousSearchBox = new WebElement[1];
         int[] consecutiveMatches = {0};
 
-        return until(SHORT_TIMEOUT_SECONDS, currentDriver -> {
+        return until(seconds, currentDriver -> {
             try {
                 WebElement currentSearchBox = findUsableSearchBox(currentDriver);
-                String currentValue = currentSearchBox == null
-                        ? null
-                        : currentSearchBox.getDomProperty("value");
-
-                if (!expectedValue.equals(currentValue)) {
+                if (currentSearchBox == null || !acceptableSearchBox.test(currentSearchBox)) {
                     previousSearchBox[0] = null;
                     consecutiveMatches[0] = 0;
                     return null;
@@ -188,14 +133,10 @@ public class HomePage extends BasePage {
         });
     }
 
-    /**
-     * Aynı locator'a uyan birden fazla input varsa odakta olanı; yoksa görünür
-     * ve etkin adayların sonuncusunu seçer. Genişletilmiş input DOM'a sonradan eklenir.
-     */
     private WebElement findUsableSearchBox(WebDriver currentDriver) {
         WebElement fallback = null;
 
-        for (WebElement candidate : currentDriver.findElements(SEARCH_BOX)) {
+        for (WebElement candidate : findElements(currentDriver, "searchBox")) {
             try {
                 if (!candidate.isDisplayed() || !candidate.isEnabled()) {
                     continue;
@@ -209,14 +150,12 @@ public class HomePage extends BasePage {
                     return candidate;
                 }
             } catch (StaleElementReferenceException ignored) {
-                // Adaylar taranırken değişen input atlanır; sonraki poll güncel DOM'u okur.
             }
         }
 
         return fallback;
     }
 
-    /** React kontrollü input'un değerini native setter ile güncelleyip olayları yayınlar. */
     private WebElement setSearchValueWithJavaScript(
             String text, RuntimeException previousFailure) {
         try {
@@ -246,7 +185,6 @@ public class HomePage extends BasePage {
         }
     }
 
-    /** Hata mesajı için görünür arama input'undaki son değeri güvenle okur. */
     private String currentSearchValue() {
         try {
             WebElement searchBox = findUsableSearchBox(driver);
@@ -257,40 +195,31 @@ public class HomePage extends BasePage {
         }
     }
 
-    /** Girişten sonra hesap alanı görünüyorsa true, zaman aşımı olursa false döndürür. */
     public boolean loginCompleted() {
-        try {
-            // Header, giriş yönlendirmesinden sonra React tarafından yenilenebilir.
-            // Her kontrolde elementi yeniden bularak geçici stale durumunda beklemeye devam eder.
-            return until(LONG_TIMEOUT_SECONDS, currentDriver -> {
-                try {
-                    return currentDriver.findElements(LOGGED_IN_ACCOUNT).stream()
-                            .anyMatch(WebElement::isDisplayed);
-                } catch (StaleElementReferenceException exception) {
+        return waitUntilTrue(LONG_TIMEOUT_SECONDS, currentDriver -> {
+            try {
+                return findElements(currentDriver, "loggedInAccount").stream()
+                        .anyMatch(WebElement::isDisplayed);
+            } catch (StaleElementReferenceException exception) {
+                return false;
+            } catch (WebDriverException exception) {
+                if (exception.getMessage() != null
+                        && exception.getMessage().contains("target frame detached")) {
                     return false;
-                } catch (WebDriverException exception) {
-                    // Kimlik doğrulama yönlendirmesi sırasında Chrome eski frame'i kısa
-                    // süreliğine ayırabilir. Yeni sayfa hazır olana kadar tekrar denenir.
-                    if (exception.getMessage() != null
-                            && exception.getMessage().contains("target frame detached")) {
-                        return false;
-                    }
-                    throw exception;
                 }
-            });
-        } catch (TimeoutException exception) {
-            return false;
-        }
+                throw exception;
+            }
+        });
     }
 
     /** Arama sonuç sayfasındaki ana başlığı okur. */
     public String searchHeading() {
-        return visible(RESULT_HEADING).getText();
+        return visible("resultHeading").getText();
     }
 
     /** Üst menüdeki mevcut sepet ürün sayısını döndürür. */
     public int cartCount() {
-        visible(CART_LINK);
+        visible("cartLink");
         return readCartCount();
     }
 
@@ -299,7 +228,6 @@ public class HomePage extends BasePage {
         try {
             return until(DEFAULT_TIMEOUT_SECONDS, ignored -> {
                 int currentCount = readCartCount();
-                // until koşulunda null, beklemeye devam et anlamına gelir.
                 return currentCount == expectedCount ? currentCount : null;
             });
         } catch (TimeoutException e) {
@@ -309,21 +237,14 @@ public class HomePage extends BasePage {
 
     /** Sepet bağlantısına tıklar ve sepet URL'sinin açıldığını doğrular. */
     public void goToCart() {
-        WebElement cartLink = visible(CART_LINK);
-        try {
-            cartLink.click();
-        } catch (ElementClickInterceptedException e) {
-            // Başka bir katman normal tıklamayı keserse JavaScript tıklaması denenir.
-            javascriptClick(cartLink);
-        }
-
+        WebElement cartLink = visible("cartLink");
+        click(cartLink);
         waitUntilUrlContains("sepetim", DEFAULT_TIMEOUT_SECONDS);
     }
 
     /** Sayaç metnini temizleyip int türünde sayıya dönüştürür. */
     private int readCartCount() {
-        List<WebElement> counters = driver.findElements(CART_COUNT);
-        // Element yoksa site boş sepet için sayaç göstermiyor kabul edilir.
+        List<WebElement> counters = findElements("cartCount");
         if (counters.isEmpty()) {
             return 0;
         }
@@ -331,7 +252,6 @@ public class HomePage extends BasePage {
         WebElement counter = counters.get(0);
         String counterText = counter.getText().trim();
         if (counterText.isBlank()) {
-            // getText boşsa DOM'daki ham textContent niteliği yedek olarak okunur.
             String textContent = counter.getAttribute("textContent");
             counterText = textContent == null ? "" : textContent.trim();
         }
@@ -340,14 +260,12 @@ public class HomePage extends BasePage {
             return 0;
         }
 
-        // Rakam dışındaki rozet yazıları/boşluklar atılır.
         String numericValue = counterText.replaceAll("[^0-9]", "");
         if (numericValue.isBlank()) {
             throw new IllegalStateException(
                     "Sepet sayacı sayıya dönüştürülemedi: " + counterText);
         }
 
-        // String türündeki rakamları int türüne çevirir.
         return Integer.parseInt(numericValue);
     }
 }

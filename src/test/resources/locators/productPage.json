@@ -1,0 +1,17 @@
+[
+  {
+    "key": "productTitle",
+    "type": "css",
+    "value": "h1[data-test-id='title'], h1[data-test-id='product-name'], h1[id='product-name'], h1[itemprop='name'], main h1"
+  },
+  {
+    "key": "addToCartButton",
+    "type": "css",
+    "value": "[data-test-id='addToCart'], [data-test-id='add-to-cart-button'], [data-test-id='add-to-cart'], button[id='addToCart']"
+  },
+  {
+    "key": "addToCartConfirmation",
+    "type": "xpath",
+    "value": "//*[self::span or self::div][normalize-space()='Ürün sepetinizde' or normalize-space()='Ürün sepetinize eklendi' or normalize-space()='Ürün sepete eklendi']"
+  }
+]

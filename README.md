@@ -86,7 +86,7 @@ $env:HEPSIBURADA_EMAIL="test-hesabi@example.com"
 $env:HEPSIBURADA_PASSWORD="guvenli-parola"
 ```
 
-Bu değerler yalnızca açık PowerShell oturumunda geçerli olur. Örnek açıklama dosyası için [`src/test/resources/environment-variables.example`](src/test/resources/environment-variables.example) incelenebilir.
+Bu değerler yalnızca açık PowerShell oturumunda geçerli olur.
 
 > Güvenlik: Gerçek kullanıcı bilgilerini `README.md`, Gauge spec dosyaları, kaynak kod veya Git geçmişine eklemeyin.
 
@@ -137,19 +137,21 @@ Mevcut ayarda raporlar her yeni çalıştırmada yenilenir. Başarısız bir tes
 ├── specs/
 │   └── hepsiburada_search.spec        # İş senaryosu ve test adımları
 ├── src/test/java/
-│   ├── config/EnvironmentConfig.java  # Ortam değişkeni kontrolü
+│   ├── base/BaseTest.java              # Page nesnelerinin ortak yönetimi
 │   ├── driver/Driver.java             # Chrome WebDriver yapılandırması
 │   ├── hooks/Hooks.java               # Senaryo öncesi/sonrası yaşam döngüsü
 │   ├── pages/                          # Page Object sınıfları
-│   └── steps/HepsiburadaSteps.java    # Gauge adım implementasyonları
-├── src/test/resources/                # Ortam değişkeni örneği
+│   ├── steps/HepsiburadaSteps.java    # Gauge adım implementasyonları
+│   └── utils/                          # Ortak element, locator ve ortam yardımcıları
+├── src/test/resources/
+│   └── locators/                       # Key, type ve value biçimli locator JSON dosyaları
 ├── manifest.json                      # Gauge proje ve eklenti tanımı
 └── pom.xml                            # Maven bağımlılıkları ve eklentileri
 ```
 
 ## Mimari Yaklaşım
 
-- **Page Object Model:** Sayfa locator'ları ve kullanıcı etkileşimleri `pages` paketinde tutulur.
+- **Page Object Model:** Sayfa locator'ları JSON dosyalarında, kullanıcı etkileşimleri `pages` paketinde tutulur.
 - **Açık beklemeler:** Dinamik öğeler sabit ve uzun beklemeler yerine Selenium koşullarıyla beklenir.
 - **Bağımsız test verisi:** Seçilen ürünün adı, ürün bağlantısı/kodu ve sepet sayısı senaryo sırasında kaydedilir.
 - **Kararlı ürün doğrulaması:** Sepetteki ürün, benzer adlardan etkilenmemesi için ürün kodu veya takip parametrelerinden arındırılmış URL yolu ile eşleştirilir.

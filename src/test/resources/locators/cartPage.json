@@ -1,0 +1,22 @@
+[
+  {
+    "key": "productLink",
+    "type": "css",
+    "value": "[class*='product_name_'] a"
+  },
+  {
+    "key": "removeButton",
+    "type": "css",
+    "value": "a[aria-label='Sepetten Çıkar']"
+  },
+  {
+    "key": "confirmRemoveButton",
+    "type": "xpath",
+    "value": "//*[self::button or @role='button'][normalize-space(.)='Sil']"
+  },
+  {
+    "key": "productContainer",
+    "type": "xpath",
+    "value": "./ancestor::*[.//a[@aria-label='Sepetten Çıkar']][1]"
+  }
+]
